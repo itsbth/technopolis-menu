@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "technopolis-menu"
+version = "0.1.0"
+description = ""
+authors = ["Bjørn Tore Håvie <itsbth@itsbth.com>"]
+readme = "README.md"
+packages = []
+
+[tool.poetry.dependencies]
+python = "^3.9"
+httpx = "^0.23.3"
+python-dotenv = "^1.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.1.0"
+mypy = "^1.1.1"
+isort = "^5.12.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+profile = "black"
