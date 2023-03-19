@@ -13,4 +13,7 @@ spec:
           - name: main
             image: ghcr.io/itsbth/technopolis-menu:master
             imagePullPolicy: IfNotPresent
+            envFrom:
+              - secretRef:
+                  name: menu-secret
           restartPolicy: OnFailure
