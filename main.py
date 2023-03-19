@@ -15,13 +15,13 @@ PARSE_CLIENT_KEY = os.environ.get("PARSE_CLIENT_KEY")
 PARSE_INSTALLATION_ID = os.environ.get("PARSE_INSTALLATION_ID")
 
 PARSE_HEADERS = {
-    "X-Parse-Application-Id": PARSE_APPLICATION_ID,
+    "User-Agent": "Parse Android SDK API Level 33",
     "X-Parse-App-Build-Version": "152",
     "X-Parse-App-Display-Version": "1.11.2",
-    "X-Parse-Os-Version": "13",
-    "User-Agent": "Parse Android SDK API Level 33",
-    "X-Parse-Installation-Id": PARSE_INSTALLATION_ID,
+    "X-Parse-Application-Id": PARSE_APPLICATION_ID,
     "X-Parse-Client-Key": PARSE_CLIENT_KEY,
+    "X-Parse-Installation-Id": PARSE_INSTALLATION_ID,
+    "X-Parse-Os-Version": "13",
 }
 
 
@@ -80,28 +80,7 @@ def extract_menu(messages):
     return result
 
 
-if __name__ == "__main__":
-    # Try to get messages for the past week
-    start_date = datetime.now()
-    # app appears to set this to 23:00 yesterday, not sure why but let's do the same
-    end_date = start_date - timedelta(days=1)
-    end_date = end_date.replace(hour=23, minute=0, second=0, microsecond=0)
-
-    # Get messages
-    messages = parse_melding(start_date, end_date)
-    # Extract menu
-    menu = extract_menu(messages["results"])
-    # Find today's menu
-    today = datetime.now().weekday()
-    today = DAYS[today]
-
-    # Print menu
-    for name in ("transit", "expedisjon"):
-        print(f"{name.capitalize()} {today.capitalize()}")
-        for item in menu[name][today]:
-            print(f" - {item}")
-
-    # Post menu to slack
+def create_slack_message(menu, today):
     blocks = [
         {
             "type": "header",
@@ -131,6 +110,35 @@ if __name__ == "__main__":
         },
     ]
 
+    return blocks
+
+
+def main():
+    # Try to get messages for the past week
+    start_date = datetime.now()
+    # app appears to set this to 23:00 yesterday, not sure why but let's do the same
+    end_date = start_date - timedelta(days=1)
+    end_date = end_date.replace(hour=23, minute=0, second=0, microsecond=0)
+
+    # Get messages
+    messages = parse_melding(start_date, end_date)
+    # Extract menu
+    menu = extract_menu(messages["results"])
+    # Find today's menu
+    today = datetime.now().weekday()
+    if today > 4:
+        print(menu)
+        raise ValueError("Today is not a weekday")
+    today = DAYS[today]
+
+    # Print menu
+    for name in ("transit", "expedisjon"):
+        print(f"{name.capitalize()} {today.capitalize()}")
+        for item in menu[name][today]:
+            print(f" - {item}")
+
+    # Post menu to slack
+    blocks = create_slack_message(menu, today)
     slack_payload = {
         "blocks": blocks,
     }
@@ -139,3 +147,7 @@ if __name__ == "__main__":
         res.raise_for_status()
     else:
         print("No slack hook configured, skipping")
+
+
+if __name__ == "__main__":
+    main()
