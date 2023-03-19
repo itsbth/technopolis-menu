@@ -7,8 +7,9 @@ ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
 ENV PATH="$POETRY_HOME/bin:$PATH"
 RUN curl -sSL https://install.python-poetry.org | python3 -
+COPY poetry.lock pyproject.toml ./
+RUN poetry install --no-interaction --no-ansi -vvv --only main
 COPY . ./
-RUN poetry install --no-interaction --no-ansi -vvv
 
 FROM python AS runtime
 ENV PATH="/app/.venv/bin:$PATH"
