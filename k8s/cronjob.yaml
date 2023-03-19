@@ -1,0 +1,16 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: menu-cronjob
+spec:
+  schedule: "0 9 * * 1-5"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: main
+            image: ghcr.io/itsbth/technopolis-menu:master
+            imagePullPolicy: IfNotPresent
+          restartPolicy: OnFailure
