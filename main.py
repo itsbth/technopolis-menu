@@ -57,11 +57,6 @@ DAYS = ("mandag", "tirsdag", "onsdag", "torsdag", "fredag")
 
 
 def extract_menu(messages):
-    """
-    Example response fragment (we need to extract from both Expedisjon and Transit)
-    "tekst":"Meny uke 11, Expedisjon 3.etg","langBeskrivelse":"﻿﻿Åpent kl 10:30-13:00\n\nMandag\n\nCaldo verde, portugisisk kålsuppe med bacon \n\nKjøttkaker med ertestuing, gulrot, brun saus, kokte poteter og tyttebær \n\nSelleribiff med linseragu, estragonmajones og hasselnøtter\n\nTirsdag\n\nKlassisk kjøttsuppe med selleri, kålrot, gulrot og purreløk  Pannestekt torsk med anisbakte rødbeter, potet- og selleripuré, grønnkål og brunet smør \n\nOumph Bolognese servert med tomatsalat og revet parmesan\n\nOnsdag\n\nTomatsuppe med makaroni \n\nBraisert ytrefilet av svin med eplesjy, rosmarinpoteter, rosenkål og sellerirotpuré \n\nPasta ragusa, (aubergine, oliven og sitron)\n\nTorsdag\n\nSøtpotetsuppe med ingefær og kokosmelk\n\nBaccalà alla livornese - Klippfisk i tomatsaus fra Livorno \n\nPai med karamellisert løktrio, tomat og aspargesbønnesalat\n\nFredag\n\nBlomkål- og brokkolisuppe \n\nTaco ( kylling) med tilbehør \n\nMassaman curry med peanøtter, aspargesbønner, potet og gulrot\n\n",
-    Return should be cantina(transit or ekspedisjon)=>day=>[menu]
-    """
     result = {}
     for message in messages:
         if m := MENU_TEXT_REGEX.match(message["tekst"]):
@@ -128,7 +123,7 @@ def main():
     today = datetime.now().weekday()
     if today > 4:
         print(menu)
-        raise ValueError("Today is not a weekday")
+        return
     today = DAYS[today]
 
     # Print menu
