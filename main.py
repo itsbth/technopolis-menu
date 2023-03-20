@@ -86,24 +86,33 @@ def create_slack_message(menu, today):
             },
         },
         {"type": "divider"},
-        {"type": "section", "text": {"type": "mrkdwn", "text": f"*Transit ⬇️*\n"}},
-        {
-            "type": "section",
-            "fields": [
-                {"type": "mrkdwn", "text": f"- {item}"}
-                for item in menu["transit"][today]
-            ],
-        },
-        {"type": "divider"},
-        {"type": "section", "text": {"type": "mrkdwn", "text": f"*Expedisjon ⬆️*\n"}},
-        {
-            "type": "section",
-            "fields": [
-                {"type": "mrkdwn", "text": f"- {item}"}
-                for item in menu["expedisjon"][today]
-            ],
-        },
     ]
+
+    if "transit" in menu:
+        blocks += [
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Transit ⬇️*\n"}},
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"- {item}"}
+                    for item in menu["transit"][today]
+                ],
+            },
+            {"type": "divider"},
+        ]
+
+    if "expedisjon" in menu:
+        blocks += [
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Expedisjon ⬆️*\n"}},
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"- {item}"}
+                    for item in menu["expedisjon"][today]
+                ],
+            },
+            {"type": "divider"},
+        ]
 
     return blocks
 
@@ -128,6 +137,9 @@ def main():
 
     # Print menu
     for name in ("transit", "expedisjon"):
+        if name not in menu:
+            print(f"No menu for {name}")
+            continue
         print(f"{name.capitalize()} {today.capitalize()}")
         for item in menu[name][today]:
             print(f" - {item}")
@@ -137,6 +149,9 @@ def main():
     slack_payload = {
         "blocks": blocks,
     }
+    if 'transit' not in menu and 'expedisjon' not in menu:
+        print("No menu found, skipping")
+        return
     if SLACK_HOOK:
         res = httpx.post(SLACK_HOOK, json=slack_payload)
         res.raise_for_status()
