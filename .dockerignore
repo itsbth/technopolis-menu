@@ -1,0 +1,12 @@
+# Git
+.git/
+.gitignore/
+
+# Other unneeded files
+.github/
+k8s/
+renovate.json
+
+# From .gitignore
+.idea/
+.env.local
