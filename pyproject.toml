@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Bjørn Tore Håvie <itsbth@itsbth.com>"]
 readme = "README.md"
-packages = []
+packages = [{ include = "technopolis_menu" }]
 
 [tool.poetry.dependencies]
 python = "^3.9"

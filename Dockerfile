@@ -14,4 +14,4 @@ COPY . ./
 FROM python AS runtime
 ENV PATH="/app/.venv/bin:$PATH"
 COPY --from=poetry /app /app
-CMD ["python", "main.py"]
+CMD ["python", "-m", "technopolis_menu"]

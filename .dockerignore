@@ -10,3 +10,6 @@ renovate.json
 # From .gitignore
 .idea/
 .env.local
+
+# Python
+*.py[cod]
