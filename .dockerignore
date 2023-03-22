@@ -12,4 +12,5 @@ renovate.json
 .env.local
 
 # Python
+__pycache__/
 *.py[cod]
