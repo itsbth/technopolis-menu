@@ -253,7 +253,6 @@ def create_slack_message(menu: dict, today: datetime, openai_parsed: bool):
                 "text": {
                     "type": "mrkdwn",
                     "text": "Powered by AI :robot_face:",
-                    "emoji": True,
                 },
             }
         )
