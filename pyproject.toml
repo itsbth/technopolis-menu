@@ -18,6 +18,7 @@ boto3 = "^1.26.95"
 black = "^23.1.0"
 mypy = "^1.1.1"
 isort = "^5.12.0"
+ruff = "^0.0.257"
 
 [build-system]
 requires = ["poetry-core"]
@@ -25,3 +26,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.isort]
 profile = "black"
+
+[tool.ruff]
+line-length = 128

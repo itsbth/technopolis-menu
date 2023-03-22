@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -78,7 +77,7 @@ def extract_menu(messages):
                 try:
                     result[cantina] = parse_menu_gpt(message["langBeskrivelse"])
                     openai_parsed = True
-                except Exception as e:
+                except Exception:
                     import traceback
 
                     traceback.print_exc()
@@ -101,7 +100,7 @@ def create_slack_message(menu: dict, today: datetime, openai_parsed: bool):
 
     if "transit" in menu:
         blocks += [
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Transit ⬇️*\n"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": "*Transit ⬇️*\n"}},
             {
                 "type": "section",
                 "fields": [
@@ -116,7 +115,7 @@ def create_slack_message(menu: dict, today: datetime, openai_parsed: bool):
         blocks += [
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*Expedisjon ⬆️*\n"},
+                "text": {"type": "mrkdwn", "text": "*Expedisjon ⬆️*\n"},
             },
             {
                 "type": "section",

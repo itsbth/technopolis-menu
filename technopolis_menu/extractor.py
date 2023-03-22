@@ -91,17 +91,31 @@ GPT_PROMPTS = [
     [
         {
             "role": "system",
-            "content": "Send me a Norwegian cantina menu, and I'll return a JSON document with arrays of dishes for each day of the week, using the keys [mandag, tirsdag, onsdag, torsdag, fredag].",
+            "content": (
+                "Send me a Norwegian cantina menu, and I'll return a JSON document with"
+                " arrays of dishes for each day of the week, using the keys [mandag,"
+                " tirsdag, onsdag, torsdag, fredag]."
+            ),
         }
     ],
     [
         {
             "role": "system",
-            "content": "You are an assistant designed to parse unstructured text into JSON. You will be given a short description, the expected format, and the unstructured text. You are the reply with only the JSON response.",
+            "content": (
+                "You are an assistant designed to parse unstructured text into JSON."
+                " You will be given a short description, the expected format, and the"
+                " unstructured text. You are the reply with only the JSON response."
+            ),
         },
         {
             "role": "user",
-            "content": "This is the menu from a cantina, but the text is somewhat malformed. Please respond with only a JSON document where each key is a day, and the value is an array of the options for that day. Do not translate the options, but use the keys [mandag, tirsdag, onsdag, torsdag, fredag].",
+            "content": (
+                "This is the menu from a cantina, but the text is somewhat malformed."
+                " Please respond with only a JSON document where each key is a day, and"
+                " the value is an array of the options for that day. Do not translate"
+                " the options, but use the keys [mandag, tirsdag, onsdag, torsdag,"
+                " fredag]."
+            ),
         },
     ],
 ]
