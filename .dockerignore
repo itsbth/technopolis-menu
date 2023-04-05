@@ -13,4 +13,5 @@ renovate.json
 
 # Python
 __pycache__/
-*.py[cod]
+
+dist/

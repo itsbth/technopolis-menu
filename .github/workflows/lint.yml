@@ -1,4 +1,4 @@
-name: Lint
+name: Lint and test
 
 on:
     push:
@@ -23,3 +23,19 @@ jobs:
         - run: poetry install
         - run: poetry run black --check .
         - run: poetry run ruff check --format github .
+        # WIP, typing is incomplete
+        # - run: poetry run mypy .
+
+    test:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v2
+        - uses: actions/setup-python@v4
+          with:
+            python-version: 3.11
+        - name: Run image
+          uses: abatilo/actions-poetry@v2
+          with:
+            poetry-version: 1.4.0
+        - run: poetry install
+        - run: poetry run python -m unittest discover -s test -p "*_test.py"

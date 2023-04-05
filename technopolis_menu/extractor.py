@@ -2,17 +2,17 @@ import json
 import logging
 import os
 
-import boto3
 import openai
+
+from .s3 import S3_ACCESS_KEY, S3_ENDPOINT, S3_SECRET_KEY, get_s3_resource
+from .stats import incr_stat
 
 logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", None)
 OPENAI_ORGANIZATION = os.environ.get("OPENAI_ORGANIZATION", None)
 S3_BUCKET = os.environ.get("CACHE_BUCKET", None)
-S3_ENDPOINT = os.environ.get("S3_ENDPOINT", None)
-S3_ACCESS_KEY = os.environ.get("S3_ACCESS_KEY_ID", None)
-S3_SECRET_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", None)
+
 DAYS = ("mandag", "tirsdag", "onsdag", "torsdag", "fredag")
 
 
@@ -32,12 +32,7 @@ def s3_cache(prefix=""):
             import hashlib
             import json
 
-            if (
-                not S3_BUCKET
-                or not S3_ENDPOINT
-                or not S3_ACCESS_KEY
-                or not S3_SECRET_KEY
-            ):
+            if not S3_BUCKET or not S3_ENDPOINT or not S3_ACCESS_KEY or not S3_SECRET_KEY:
                 raise ValueError("Missing S3 config, bail out")
 
             digest = hashlib.sha256(str(args[0]).encode("utf-8")).hexdigest()
@@ -45,21 +40,19 @@ def s3_cache(prefix=""):
                 key = f"{prefix}/{digest[:2]}/{digest}"
             else:
                 key = f"{digest[:2]}/{digest}"
-            s3 = boto3.resource(
-                "s3",
-                endpoint_url=S3_ENDPOINT,
-                aws_access_key_id=S3_ACCESS_KEY,
-                aws_secret_access_key=S3_SECRET_KEY,
-            )
+            s3 = get_s3_resource()
             try:
                 obj = s3.Object(S3_BUCKET, key)
                 data = json.loads(obj.get()["Body"].read().decode("utf-8"))
                 logger.info(f"Got {key} from cache")
+                incr_stat("cache_hit")
                 if data["status"] == "error":
-                    logger.warn(f"Got error from cache: {data['result']}")
+                    logger.warning(f"Got error from cache: {data['result']}")
+                    incr_stat("cache_hit_error")
                     raise Exception(data["result"])
                 return data["result"]
             except s3.meta.client.exceptions.NoSuchKey:
+                incr_stat("cache_miss")
                 try:
                     result = fn(*args, **kwargs)
                     obj.put(Body=json.dumps({"result": result, "status": "success"}))
@@ -74,13 +67,12 @@ def s3_cache(prefix=""):
 
 
 def parse_menu_simple(menu: str):
-    days = {}
+    days = {day: [] for day in DAYS}
     menu = menu.split("\n\n")
     day = None
     for line in menu:
         if line.lower() in DAYS:
             day = line.lower()
-            days[day] = []
         elif day and line:
             days[day].append(line.strip())
     return days
@@ -146,7 +138,9 @@ def parse_menu_gpt(menu: str):
     openai.api_key = OPENAI_API_KEY
 
     logger.info("Calling OpenAI")
+    incr_stat("openai_calls")
     for prompt in GPT_PROMPTS:
+        incr_stat("openai_prompts")
         result = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             temperature=0.0,
@@ -154,10 +148,13 @@ def parse_menu_gpt(menu: str):
             messages=prompt + [{"role": "user", "content": menu}],
         )
         try:
-            menu_json = json.loads(result.choices[0].text)
+            incr_stat("openai_successes")
+            logger.debug(f"Got result: {result}")
+            menu_json = json.loads(result.choices[0].message.content)
             if verify_menu_structure(menu_json):
                 return menu_json
+            incr_stat("openai_invalid_structure")
         except json.JSONDecodeError:
-            pass
+            incr_stat("openai_invalid_json")
 
     raise Exception("Could not parse menu")

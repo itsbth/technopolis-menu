@@ -12,6 +12,7 @@ httpx = "^0.23.3"
 python-dotenv = "^1.0.0"
 openai = "^0.27.2"
 boto3 = "^1.26.95"
+pytz = "^2023.2"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -23,6 +24,10 @@ ruff = "^0.0.257"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 128
+target-version = ['py311']
 
 [tool.isort]
 profile = "black"
