@@ -22,6 +22,7 @@ jobs:
             poetry-version: 1.4.0
         - run: poetry install
         - run: poetry run black --check .
+        - run: poetry run isort --check .
         - run: poetry run ruff check --format github .
         # WIP, typing is incomplete
         # - run: poetry run mypy .
