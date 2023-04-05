@@ -1,35 +1,49 @@
+import json
 import logging
 import os
 import re
+import typing
 from datetime import datetime, timedelta
 
 import httpx
-from dotenv import load_dotenv
+import pytz
 
+from .config import DUMMY  # isort: split
 from .extractor import DAYS, parse_menu_gpt, parse_menu_simple
+from .s3 import get_s3_resource
+from .slack import run_slack_post
+from .stats import get_all, incr_stat
 
-load_dotenv()
-load_dotenv(".env.local")
+if typing.TYPE_CHECKING:
+    # Reference DUMMY to avoid unused import warning/removal
+    DUMMY
 
 # Log to stdout
 logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
-SLACK_HOOK = os.environ.get("SLACK_HOOK", None)
-
 PARSE_APPLICATION_ID = os.environ.get("PARSE_APPLICATION_ID")
 PARSE_CLIENT_KEY = os.environ.get("PARSE_CLIENT_KEY")
 PARSE_INSTALLATION_ID = os.environ.get("PARSE_INSTALLATION_ID")
+
+SLACK_POST_TIME = os.environ.get("SLACK_POST_TIME", "10:00")
+SLACK_POST_TZ = os.environ.get("SLACK_POST_TZ", "Europe/Oslo")
+# How many minutes before or after SLACK_POST_TIME should we post?
+# Too low and we might miss the window, too high and we might post twice.
+SLACK_POST_WINDOW = int(os.environ.get("SLACK_POST_WINDOW", "15"))
+
+PUBLIC_BUCKET = os.environ.get("PUBLIC_BUCKET", None)
+
 
 PARSE_HEADERS = {
     "User-Agent": "Parse Android SDK API Level 33",
     "X-Parse-App-Build-Version": "152",
     "X-Parse-App-Display-Version": "1.11.2",
+    "X-Parse-Os-Version": "13",
     "X-Parse-Application-Id": PARSE_APPLICATION_ID,
     "X-Parse-Client-Key": PARSE_CLIENT_KEY,
     "X-Parse-Installation-Id": PARSE_INSTALLATION_ID,
-    "X-Parse-Os-Version": "13",
 }
 
 
@@ -42,9 +56,7 @@ def parse_melding(start_date: datetime, end_date: datetime):
             "$or": [
                 {"publisert": True},
                 {
-                    "publisertFraDatoTid": {
-                        "$lte": {"__type": "Date", "iso": start_date.isoformat()}
-                    },
+                    "publisertFraDatoTid": {"$lte": {"__type": "Date", "iso": start_date.isoformat()}},
                     "publisert": False,
                     "publisertStatus": {"$in": ["2", "3"]},
                 },
@@ -59,86 +71,78 @@ def parse_melding(start_date: datetime, end_date: datetime):
     return response.json()
 
 
-MENU_TEXT_REGEX = re.compile(
-    r"Meny uke (?P<week>\d+), (?P<cantina>Expedisjon|Transit) \d\.etg"
-)
+MENU_TEXT_REGEX = re.compile(r"Meny uke (?P<week>\d+), (?P<cantina>Expedisjon|Transit) \d\.etg")
 
 
-def extract_menu(messages):
+def get_menu_messages(messages):
     result = {}
-    # Store if any lists are (successfully) parsed by openai, se we can add a "Powered by AI" footer
-    openai_parsed = False
     for message in messages:
         if m := MENU_TEXT_REGEX.match(message["tekst"]):
             cantina = m.group("cantina").lower()
             if cantina not in result:
-                result[cantina] = {}
-            if "langBeskrivelse" in message:
-                try:
-                    result[cantina] = parse_menu_gpt(message["langBeskrivelse"])
-                    openai_parsed = True
-                except Exception:
-                    import traceback
-
-                    traceback.print_exc()
-                    result[cantina] = parse_menu_simple(message["langBeskrivelse"])
-    return result, openai_parsed
+                result[cantina] = message
+    return result
 
 
-def create_slack_message(menu: dict, today: datetime, openai_parsed: bool):
-    blocks = [
-        {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": "Dagens Meny :fork_and_knife:",
-                "emoji": True,
-            },
-        },
-        {"type": "divider"},
-    ]
+def extract_menu(message):
+    result = {
+        "title": message["tekst"],
+        "raw_description": message["langBeskrivelse"],
+        # Note publishedAt is {__type: "Date"}, while createdAt and updatedAt are strings
+        "published_at": message["publishedAt"]["iso"],
+        "created_at": message["createdAt"],
+        "updated_at": message["updatedAt"],
+    }
+    try:
+        result["gpt"] = parse_menu_gpt(message["langBeskrivelse"])
+    except Exception:
+        logger.exception("Failed to parse menu with openai")
+    result["simple"] = parse_menu_simple(message["langBeskrivelse"])
+    return result
 
-    if "transit" in menu:
-        blocks += [
-            {"type": "section", "text": {"type": "mrkdwn", "text": "*Transit ⬇️*\n"}},
-            {
-                "type": "section",
-                "fields": [
-                    {"type": "mrkdwn", "text": f"- {item}"}
-                    for item in menu["transit"][today]
-                ],
-            },
-            {"type": "divider"},
-        ]
 
-    if "expedisjon" in menu:
-        blocks += [
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": "*Expedisjon ⬆️*\n"},
-            },
-            {
-                "type": "section",
-                "fields": [
-                    {"type": "mrkdwn", "text": f"- {item}"}
-                    for item in menu["expedisjon"][today]
-                ],
-            },
-            {"type": "divider"},
-        ]
+def should_post_to_slack() -> bool:
+    """
+    Check if we should post to slack on this run.
+    Returns true if it's a weekday, and the current time is +- 10 minutes of SLACK_POST_TIME (corrected for SLACK_POST_TZ)
+    :return: True if we should post to slack
+    """
+    local_time = datetime.now(pytz.timezone(SLACK_POST_TZ))
+    if local_time.weekday() > 4:
+        return False
 
-    if openai_parsed:
-        blocks.append(
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "Powered by AI :robot_face:",
-                },
-            }
-        )
+    post_time = datetime.strptime(SLACK_POST_TIME, "%H:%M").time()
+    total_minutes = local_time.hour * 60 + local_time.minute
+    post_minutes = post_time.hour * 60 + post_time.minute
 
-    return blocks
+    return abs(total_minutes - post_minutes) < SLACK_POST_WINDOW
+
+
+def upload_to_s3(menus: dict):
+    """
+    Uploads menus to /menu/{week}.json, and the path of the file to /menu/latest
+    :param menus:
+    :return:
+
+    TODO: Fetch latest menu from s3, and only upload if it's different?
+    """
+
+    s3 = get_s3_resource()
+    bucket = s3.Bucket(PUBLIC_BUCKET)
+    week = datetime.now().isocalendar()[1]
+    key = f"menu/{week}.json"
+    logger.debug(f"Uploading menu to {key}", extra={"menus": menus})
+    bucket.Object(key).put(
+        Body=json.dumps(menus).encode("utf-8"),
+        ContentType="application/json",
+        ACL="public-read",
+    )
+    bucket.Object(
+        "menu/latest",
+    ).put(Body=str(key).encode("utf-8"), ContentType="text/plain", ACL="public-read")
+
+    logger.info(f"Uploaded menu to {key}")
+    incr_stat("upload_menu")
 
 
 def main():
@@ -149,41 +153,55 @@ def main():
     end_date = end_date.replace(hour=23, minute=0, second=0, microsecond=0)
 
     # Get messages
-    messages = parse_melding(start_date, end_date)
+    if test_file := os.environ.get("TEST_FILE", None):
+        with open(test_file, "r") as f:
+            messages = json.load(f)
+    else:
+        messages = parse_melding(start_date, end_date)
+
+    # TODO: Add flag to trigger this
+    if not test_file:
+        with open("test.json", "w") as f:
+            json.dump(messages, f)
+
+    cantinas = get_menu_messages(messages["results"])
+
     # Extract menu
-    menu, openai_parsed = extract_menu(messages["results"])
-    logger.debug(f"Menu: {menu}, openai_parsed: {openai_parsed}")
+    menus = {name: extract_menu(message) for name, message in cantinas.items()}
+
+    logger.debug(f"Menu: {menus}")
+
+    if PUBLIC_BUCKET:
+        upload_to_s3(menus)
+
     # Find today's menu
     today = datetime.now().weekday()
     if today > 4:
-        print(menu)
         return
     today = DAYS[today]
 
     # Print menu
     for name in ("transit", "expedisjon"):
-        if name not in menu:
+        if name not in menus:
             print(f"No menu for {name}")
             continue
         print(f"{name.capitalize()} {today.capitalize()}")
-        for item in menu[name][today]:
+        parsed_menu = menus[name]["simple"]
+        if "gpt" in menus[name]:
+            parsed_menu = menus[name]["gpt"]
+        for item in parsed_menu[today]:
             print(f" - {item}")
-    if openai_parsed:
+    if any("gpt" in m for m in menus.values()):
         print("Powered by OpenAI GPT-3.5 Turbo")
 
-    # Post menu to slack
-    blocks = create_slack_message(menu, today, openai_parsed)
-    slack_payload = {
-        "blocks": blocks,
-    }
-    if "transit" not in menu and "expedisjon" not in menu:
-        print("No menu found, skipping")
+    if "transit" not in menus and "expedisjon" not in menus:
+        logger.warning("No menu found, skipping")
         return
-    if SLACK_HOOK:
-        res = httpx.post(SLACK_HOOK, json=slack_payload)
-        res.raise_for_status()
-    else:
-        print("No slack hook configured, skipping")
+
+    if should_post_to_slack():
+        run_slack_post(today, menus)
+
+    logger.info(f"stats: {get_all()}")
 
 
 if __name__ == "__main__":
