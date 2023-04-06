@@ -5,6 +5,8 @@ metadata:
   name: menu-cronjob
 spec:
   schedule: "0 6-16 * * 1-5"
+  startingDeadlineSeconds: 600
+  concurrencyPolicy: Forbid
   jobTemplate:
     spec:
       template:
@@ -12,7 +14,11 @@ spec:
           containers:
           - name: main
             image: ghcr.io/itsbth/technopolis-menu:master
-            imagePullPolicy: IfNotPresent
+            imagePullPolicy: Always
+            securityContext:
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              runAsUser: 1000
             envFrom:
               - secretRef:
                   name: menu-secret
