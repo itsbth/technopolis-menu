@@ -12,6 +12,7 @@ on:
     tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ master ]
+  merge_group:
 
 env:
   # Use docker.io for Docker Hub if empty
